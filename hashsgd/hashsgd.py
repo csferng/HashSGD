@@ -14,6 +14,7 @@ as the name is changed.
  0. You just DO WHAT THE FUCK YOU WANT TO.
 '''
 
+import feature_transformer
 
 from datetime import datetime
 from math import log, exp, sqrt
@@ -38,8 +39,9 @@ def parse_args():
     global train, label, test, prediction, D, alpha
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=2**18)
+    parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=262147)
     parser.add_argument('--alpha', '-a', help='learning rate for SGD optimization', type=float, default=.1)
+    parser.add_argument('--transform', help='method to transform features', default='one_hot')
     parser.add_argument('train', help='path to training file')
     parser.add_argument('train_label', help='path to label file of training data')
     subparsers = parser.add_subparsers()
@@ -84,18 +86,9 @@ def data(path, label_path=None):
                 label.readline()  # we don't need the headers
             continue
         # parse x
-        for m, feat in enumerate(line.rstrip().split(',')):
-            if m == 0:
-                ID = int(feat)
-            else:
-                # one-hot encode everything with hash trick
-                # categorical: one-hotted
-                # boolean: ONE-HOTTED
-                # numerical: ONE-HOTTED!
-                # note, the build in hash(), although fast is not stable,
-                #       i.e., same value won't always have the same hash
-                #       on different machines
-                x[m] = abs(hash(str(m) + '_' + feat)) % D
+        features = line.rstrip().split(',')
+        ID = int(features[0])
+        x = feature_transformer.transform(x, features[1:])
         # parse y, if provided
         if label_path:
             # use float() to prevent future type casting, [1:] to ignore id
@@ -212,6 +205,7 @@ def main():
     print('%s\tstart' % (start))
 
     args = parse_args()
+    feature_transformer.init(args.D, args.transform)
 
     if args.cmd == 'test':   # train on training data and predict on testing data
         w = train_one(args.train, args.train_label)
