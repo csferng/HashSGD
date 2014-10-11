@@ -9,12 +9,13 @@ INTEGER_FEATURE_ID = set([15,17,18,22,23,27,46,48,49,53,54,58,76,78,79,83,84,88,
 class FeatureTransformer(object):
     def __init__(self, d):
         self.dim = d
+        self.hash_base = d
 
     def transform(self, x, features):
         raise Exception("Not implemented transform() in base class")
 
     def hash_to_D(self, idx, feat):
-        return abs(hash(str(idx) + '_' + feat)) % self.dim
+        return abs(hash(str(idx) + '_' + feat)) % self.hash_base
 
     def initialize_per_train(self, feat_lines):
         pass
@@ -44,34 +45,31 @@ class OneHotTransformer(FeatureTransformer):
 class NumericValueTransformer(FeatureTransformer):
     """
     categorical: one-hot encoded
-    boolean: one-hot indicator for missing, or +1/-1 for YES/NO
-    numerical: one-hot indicator for missing, or scaled to -1~+1 with 0 unchanged
+    boolean: one-hot encoded, and +1/-1 for YES/NO
+    integer: one-hot encoded, and log-scale to 0~1 with -1 unchanged
+    numerical: one-hot encoded, and scaled to -1~+1 with 0 unchanged
     """
     def __init__(self, d):
         super(NumericValueTransformer, self).__init__(d)
         self.scale = collections.defaultdict(lambda:1)
+        self.dim = self.hash_base + 145
 
     def transform(self, x, features):
         # x[0] reserved for bias term
-        if x is None:
-            x = [(0,1.)] + [0]*len(features)
+        x = [(0,1.)]
         for (m,feat) in enumerate(features):
             idx = m + 1
-            if idx in CATEGORICAL_FEATURE_ID:
-                featid = self.hash_to_D(idx, feat)
-                featval = 1.
+            x.append((self.hash_to_D(idx,feat), 1.))
+            if feat == '':
+                pass
             elif idx in BOOLEAN_FEATURE_ID:
-                featid = self.hash_to_D(idx, '' if feat=='' else 'YES')
-                featval = 1. if feat in ['','YES'] else -1.
+                x.append((self.hash_base+idx-1, 1. if feat=='YES' else -1.))
             elif idx in INTEGER_FEATURE_ID:
-                featid = self.hash_to_D(idx, '' if feat in ['','-1'] else '0')
-                featval = 1. if feat=='' or feat=='-1' else math.log(int(feat)+1)/self.scale[idx]
+                raw = int(feat)
+                val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
+                x.append((self.hash_base+idx-1, val))
             elif idx in NUMERIC_FEATURE_ID:
-                featid = self.hash_to_D(idx, '' if feat=='' else '0')
-                featval = 1. if feat=='' else float(feat)/self.scale[idx]
-            else:
-                raise ValueError("Not handled index: "+str(idx))
-            x[idx] = (featid, featval)
+                x.append((self.hash_base+idx-1, float(feat)/self.scale[idx]))
         return x
 
     def initialize_per_train(self, feat_lines):
