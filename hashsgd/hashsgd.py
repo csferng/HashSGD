@@ -15,6 +15,7 @@ as the name is changed.
 '''
 
 from data import Data
+from model import LogisticRegressionModel as Model
 import feature_transformer
 import util
 
@@ -28,6 +29,9 @@ import argparse
 
 
 # parameters #################################################################
+
+# a list for range(0, 33) - 13, no need to learn y14 since it is always 0
+K = [k for k in range(33) if k != 13]
 
 alpha = .1   # learning rate for sgd optimization
 
@@ -58,61 +62,8 @@ def parse_args():
     print args
     return args
 
-
-# B. Bounded logloss
-# INPUT:
-#     p: our prediction
-#     y: real answer
-# OUTPUT
-#     bounded logarithmic loss of p given y
-def logloss(p, y):
-    p = max(min(p, 1. - 10e-15), 10e-15)
-    return -log(p) if y == 1. else -log(1. - p)
-
-
-# C. Get probability estimation on x
-# INPUT:
-#     x: features
-#     w: weights
-# OUTPUT:
-#     probability of p(y = 1 | x; w)
-def predict(x, w):
-    wTx = 0.
-    for (i,v) in x:  # do wTx
-        wTx += w[i] * v  # w[i] * x[i]
-    return 1. / (1. + exp(-max(min(wTx, 20.), -20.)))  # bounded sigmoid
-
-
-# D. Update given model
-# INPUT:
-# alpha: learning rate
-#     w: weights
-#     n: sum of previous absolute gradients for a given feature
-#        this is used for adaptive learning rate
-#     x: feature, a list of indices
-#     p: prediction of our model
-#     y: answer
-# MODIFIES:
-#     w: weights
-#     n: sum of past absolute gradients
-def update(alpha, w, n, x, p, y):
-    for (i,v) in x:
-        # alpha / sqrt(n) is the adaptive learning rate
-        # (p - y) * x[i] is the current gradient
-        n[i] += abs(p - y)
-        w[i] -= (p - y) * v * alpha / sqrt(n[i])
-
-
 # training and testing #######################################################
-def train_one(data):
-    # a list for range(0, 33) - 13, no need to learn y14 since it is always 0
-    K = [k for k in range(33) if k != 13]
-
-    # initialize our model, all 32 of them, again ignoring y14
-    D = feature_maker.dim
-    w = [[0.] * D if k != 13 else None for k in range(33)]
-    n = [[0.] * D if k != 13 else None for k in range(33)]
-
+def train_one(data, model):
     loss = 0.
     loss_y14 = log(1. - 10**-15)
 
@@ -120,24 +71,19 @@ def train_one(data):
     for (i,(ID, x, y)) in enumerate(data):
         cnt += 1
 
-        # get predictions and train on all labels
-        for k in K:
-            p = predict(x, w[k])
-            update(alpha, w[k], n[k], x, p, y[k])
-            loss += logloss(p, y[k])  # for progressive validation
+        loss += sum(model.update(x, y, alpha))   # report current loss and update model
         loss += loss_y14  # the loss of y14, logloss is never zero
 
         # print out progress, so that we know everything is working
         if cnt % 100000 == 0:
             info('trained now: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
+            loss = 0.
+            cnt = 0
 
     info('trained all: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
-    return w
+    return model
 
-def evaluate(valid_data, w):
-    # a list for range(0, 33) - 13, no need to learn y14 since it is always 0
-    K = [k for k in range(33) if k != 13]
-
+def evaluate(valid_data, model):
     loss = 0.
     loss_y14 = log(1. - 10**-15)
 
@@ -145,14 +91,14 @@ def evaluate(valid_data, w):
     for (ID, x, y) in valid_data:
         cnt += 1
 
-        # get predictions and train on all labels
-        for k in K:
-            p = predict(x, w[k])
-            loss += logloss(p, y[k])  # for progressive validation
+        loss += sum(model.loss(x,y))    # sum loss of all labels except y14
         loss += loss_y14  # the loss of y14, logloss is never zero
 
     info('evaluated: %d\tlogloss: %f'%(cnt, loss/33./cnt))
     return (cnt, loss/33.)
+
+def new_model(D):
+    return Model(K, D)
 
 def main():
     global feature_maker
@@ -165,13 +111,13 @@ def main():
     if args.cmd == 'test':   # train on training data and predict on testing data
         feature_maker.initialize_per_train(util.open_csv(args.train))
         data = Data(args.train, feature_maker, args.train_label)
-        w = train_one(data)
+        model = train_one(data, new_model(feature_maker.dim))
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
             for ID, x in Data(args.test, feature_maker):
-                for k in K:
-                    p = predict(x, w[k])
-                    outfile.write('%s_y%d,%s\n' % (ID, k+1, str(p)))
+                pred = model.predict(x)
+                for (k,p) in zip(K,pred):
+                    outfile.write('%s_y%d,%.16f\n' % (ID,k+1,p))
                     if k == 12:
                         outfile.write('%s_y14,0.0\n' % ID)
     else:   # do cross validation
@@ -181,9 +127,9 @@ def main():
         for fold in xrange(1,nfold+1):
             feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
             train_data = Data(args.train, feature_maker, args.train_label, (-fold,nfold))
-            w = train_one(train_data)
+            model = train_one(train_data, new_model(feature_maker.dim))
             valid_data = Data(args.train, feature_maker, args.train_label, (fold,nfold))
-            f_ins, f_loss = evaluate(valid_data, w)
+            f_ins, f_loss = evaluate(valid_data, model)
             cnt_ins += f_ins
             cnt_loss += f_loss
         print "CV result: %f"%(cnt_loss/cnt_ins)

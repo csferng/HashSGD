@@ -6,11 +6,10 @@ class Data(object):
     """ Container of a data set. """
     def __init__(self, feat_path, feature_maker, label_path=None, fold_in_cv=None):
         """ Construct a dat set.
-        parameters:
-        feat_path: path to raw data file
-        feature_maker: instance of FeatureTransformer to convert raw data to features
-        label_path: (optional) path to label file
-        fold_in_cv: (optional) tuple (x,y). Split data to y folds, and take
+        @param feat_path: path to raw data file
+        @param feature_maker: instance of FeatureTransformer to convert raw data to features
+        @param label_path: (optional) path to label file
+        @param fold_in_cv: (optional) tuple (x,y). Split data to y folds, and take
             only x-th fold if x>0, or all except x-th fold if x<0
         """
         self.instances = []
@@ -33,5 +32,5 @@ class Data(object):
                 self.instances.append((ID, x, y))
 
     def __iter__(self):
-        """ Iterator of the data set. (ID,x,y) or (ID,x). """
+        """ Return an iterator of the data set. (ID,x,y) or (ID,x). """
         return itertools.chain(self.instances)
