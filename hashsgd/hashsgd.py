@@ -15,6 +15,7 @@ as the name is changed.
 '''
 
 import feature_transformer
+import util
 
 from datetime import datetime
 from math import log, exp, sqrt
@@ -56,7 +57,6 @@ def parse_args():
     print args
     train = args.train
     label = args.train_label
-    D = args.D
     alpha = args.alpha
     if args.cmd == 'test':
         test = args.test
@@ -70,31 +70,34 @@ def parse_args():
 # INPUT:
 #     path: path to train.csv or test.csv
 #     label_path: (optional) path to trainLabels.csv
+#     fold_in_cv: (optional) tuple (x,y), see util.in_fold
 # YIELDS:
 #     ID: id of the instance (can also acts as instance count)
 #     x: a list of indices that its value is 1
 #     y: (if label_path is present) label value of y1 to y33
-def data(path, label_path=None):
-    for t, line in enumerate(open(path)):
-        # initialize our generator
-        if t == 0:
-            # create a static x,
-            # so we don't have to construct a new x for every instance
-            x = [0] * 146
-            if label_path:
-                label = open(label_path)
-                label.readline()  # we don't need the headers
-            continue
+def data(path, label_path=None, fold_in_cv=None):
+    # create a static x,
+    # so we don't have to construct a new x for every instance
+    # each item of x should be a tuple (feat-id, feat-value)
+    x = [0] * 146
+    x[0] = (0,1.)
+    if label_path:
+        line_stream = util.open_feature_and_label(path, label_path, fold_in_cv)
+    else:
+        line_stream = util.open_csv(path)
+    for line in line_stream:
+        feat_line = line[0] if label_path else line
         # parse x
-        features = line.rstrip().split(',')
+        features = feat_line.rstrip().split(',')
         ID = int(features[0])
         x = feature_transformer.transform(x, features[1:])
-        # parse y, if provided
-        if label_path:
+        if label_path is None:
+            yield (ID, x)
+        else:
+            # parse y, if provided
             # use float() to prevent future type casting, [1:] to ignore id
-            y = [float(y) for y in label.readline().split(',')[1:]]
-        yield (ID, x, y) if label_path else (ID, x)
-
+            y = [float(y) for y in line[1].split(',')[1:]]
+            yield (ID, x, y)
 
 # B. Bounded logloss
 # INPUT:
@@ -115,8 +118,8 @@ def logloss(p, y):
 #     probability of p(y = 1 | x; w)
 def predict(x, w):
     wTx = 0.
-    for i in x:  # do wTx
-        wTx += w[i] * 1.  # w[i] * x[i], but if i in x we got x[i] = 1.
+    for (i,v) in x:  # do wTx
+        wTx += w[i] * v  # w[i] * x[i]
     return 1. / (1. + exp(-max(min(wTx, 20.), -20.)))  # bounded sigmoid
 
 
@@ -133,12 +136,11 @@ def predict(x, w):
 #     w: weights
 #     n: sum of past absolute gradients
 def update(alpha, w, n, x, p, y):
-    for i in x:
+    for (i,v) in x:
         # alpha / sqrt(n) is the adaptive learning rate
         # (p - y) * x[i] is the current gradient
-        # note that in our case, if i in x then x[i] = 1.
         n[i] += abs(p - y)
-        w[i] -= (p - y) * 1. * alpha / sqrt(n[i])
+        w[i] -= (p - y) * v * alpha / sqrt(n[i])
 
 
 # training and testing #######################################################
@@ -154,10 +156,7 @@ def train_one(train, label, fold_in_cv=None):
     loss_y14 = log(1. - 10**-15)
 
     cnt = 0
-    for (i,(ID, x, y)) in enumerate(data(train, label)):
-        # skip validation data in training
-        if fold_in_cv is not None and i%fold_in_cv[1]==fold_in_cv[0]:
-            continue
+    for (i,(ID, x, y)) in enumerate(data(train, label, fold_in_cv)):
         cnt += 1
 
         # get predictions and train on all labels
@@ -184,10 +183,7 @@ def evaluate(valid_data, label, w, fold_in_cv=None):
     loss_y14 = log(1. - 10**-15)
 
     cnt = 0
-    for (i,(ID, x, y)) in enumerate(data(valid_data, label)):
-        # skip training data
-        if fold_in_cv is not None and i%fold_in_cv[1]!=fold_in_cv[0]:
-            continue
+    for (ID, x, y) in data(valid_data, label, fold_in_cv):
         cnt += 1
 
         # get predictions and train on all labels
@@ -201,13 +197,16 @@ def evaluate(valid_data, label, w, fold_in_cv=None):
     return (cnt, loss/33.)
 
 def main():
+    global D
     start = datetime.now()
     print('%s\tstart' % (start))
 
     args = parse_args()
     feature_transformer.init(args.D, args.transform)
+    D = feature_transformer.D
 
     if args.cmd == 'test':   # train on training data and predict on testing data
+        feature_transformer.set_scale(util.open_csv(args.train))
         w = train_one(args.train, args.train_label)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
@@ -221,8 +220,9 @@ def main():
         nfold = args.nfold
         cnt_ins = 0
         cnt_loss = 0.
-        for fold in xrange(nfold):
-            w = train_one(args.train, args.train_label, (fold,nfold))
+        for fold in xrange(1,nfold+1):
+            feature_transformer.set_scale(util.open_csv(args.train, (-fold,nfold)))
+            w = train_one(args.train, args.train_label, (-fold,nfold))
             f_ins, f_loss = evaluate(args.train, args.train_label, w, (fold,nfold))
             cnt_ins += f_ins
             cnt_loss += f_loss
