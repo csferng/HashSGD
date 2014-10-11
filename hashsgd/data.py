@@ -35,6 +35,9 @@ class Data(object):
         """ Return an iterator of the data set. (ID,x,y) or (ID,x). """
         return iter(self.instances)
 
+    def rewind(self):
+        pass
+
 class StreamData(object):
     """ Container of a streaming data set. """
     def __init__(self, feat_path, feature_maker, label_path=None, fold_in_cv=None):
@@ -52,13 +55,13 @@ class StreamData(object):
         self.feat_lines = None
         self.label_lines = None
 
-        self.initialize()
+        self.rewind()
 
     def __iter__(self):
         """ Return an iterator of the data set. (ID,x,y) or (ID,x). """
         return self
 
-    def initialize(self):
+    def rewind(self):
         self.feat_lines = util.open_csv(self.feat_path, self.fold_in_cv)
         if self.label_path:
             self.label_lines = util.open_csv(self.label_path, self.fold_in_cv)

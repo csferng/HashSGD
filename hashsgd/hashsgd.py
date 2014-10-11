@@ -80,7 +80,7 @@ def train_one(data, model):
             loss = 0.
             cnt = 0
 
-    info('trained all: %d\tcurrent logloss: %f'%(i+1, loss/33./cnt))
+    info('trained all: %d\tcurrent logloss: %f'%(cnt, loss/33./max(1,cnt)))
     return model
 
 def evaluate(valid_data, model):
@@ -112,6 +112,8 @@ def main():
         feature_maker.initialize_per_train(util.open_csv(args.train))
         data = Data(args.train, feature_maker, args.train_label)
         model = train_one(data, new_model(feature_maker.dim))
+        data.rewind()
+        model = train_one(data, model)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
             for ID, x in Data(args.test, feature_maker):
@@ -128,6 +130,8 @@ def main():
             feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
             train_data = Data(args.train, feature_maker, args.train_label, (-fold,nfold))
             model = train_one(train_data, new_model(feature_maker.dim))
+            train_data.rewind()
+            model = train_one(train_data, model)
             valid_data = Data(args.train, feature_maker, args.train_label, (fold,nfold))
             f_ins, f_loss = evaluate(valid_data, model)
             cnt_ins += f_ins
