@@ -28,16 +28,15 @@ import argparse
 
 # parameters #################################################################
 
-train = 'train.csv'  # path to training file
-label = 'trainLabels.csv'  # path to label file of training data
-test = 'test.csv'  # path to testing file
-prediction = 'prediction.csv'   # path to prediction file
-
-D = 2 ** 18  # number of weights use for each model, we have 32 of them
 alpha = .1   # learning rate for sgd optimization
 
+feature_maker = None
+
+def info(s):
+    print('%s\t%s' % (datetime.now().strftime('%m/%d %H:%M:%S'), s))
+
 def parse_args():
-    global train, label, test, prediction, D, alpha
+    global train, label, test, prediction, alpha
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=262147)
@@ -54,13 +53,8 @@ def parse_args():
     subparser_test.add_argument('prediction', help='path to prediction file')
     subparser_test.set_defaults(cmd='test')
     args = parser.parse_args()
-    print args
-    train = args.train
-    label = args.train_label
     alpha = args.alpha
-    if args.cmd == 'test':
-        test = args.test
-        prediction = args.prediction
+    print args
     return args
 
 
@@ -90,7 +84,7 @@ def data(path, label_path=None, fold_in_cv=None):
         # parse x
         features = feat_line.rstrip().split(',')
         ID = int(features[0])
-        x = feature_transformer.transform(x, features[1:])
+        x = feature_maker.transform(x, features[1:])
         if label_path is None:
             yield (ID, x)
         else:
@@ -149,6 +143,7 @@ def train_one(train, label, fold_in_cv=None):
     K = [k for k in range(33) if k != 13]
 
     # initialize our model, all 32 of them, again ignoring y14
+    D = feature_maker.dim
     w = [[0.] * D if k != 13 else None for k in range(33)]
     n = [[0.] * D if k != 13 else None for k in range(33)]
 
@@ -168,11 +163,9 @@ def train_one(train, label, fold_in_cv=None):
 
         # print out progress, so that we know everything is working
         if cnt % 100000 == 0:
-            print('%s\ttrained now: %d\tcurrent logloss: %f' % (
-                datetime.now(), cnt, (loss/33.)/cnt))
-    print('%s\ttrained all: %d\tcurrent logloss: %f' % (
-        datetime.now(), cnt, (loss/33.)/cnt))
+            info('trained now: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
 
+    info('trained all: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
     return w
 
 def evaluate(valid_data, label, w, fold_in_cv=None):
@@ -192,21 +185,19 @@ def evaluate(valid_data, label, w, fold_in_cv=None):
             loss += logloss(p, y[k])  # for progressive validation
         loss += loss_y14  # the loss of y14, logloss is never zero
 
-    print('%s\tevaluated: %d\tcurrent logloss: %f' % (
-        datetime.now(), cnt, (loss/33.)/cnt))
+    info('evaluated: %d\tlogloss: %f'%(cnt, loss/33./cnt))
     return (cnt, loss/33.)
 
 def main():
-    global D
+    global feature_maker
+    info('start')
     start = datetime.now()
-    print('%s\tstart' % (start))
 
     args = parse_args()
-    feature_transformer.init(args.D, args.transform)
-    D = feature_transformer.D
+    feature_maker = feature_transformer.get_maker(args.D, args.transform)
 
     if args.cmd == 'test':   # train on training data and predict on testing data
-        feature_transformer.set_scale(util.open_csv(args.train))
+        feature_maker.initialize_per_train(util.open_csv(args.train))
         w = train_one(args.train, args.train_label)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
@@ -221,14 +212,14 @@ def main():
         cnt_ins = 0
         cnt_loss = 0.
         for fold in xrange(1,nfold+1):
-            feature_transformer.set_scale(util.open_csv(args.train, (-fold,nfold)))
+            feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
             w = train_one(args.train, args.train_label, (-fold,nfold))
             f_ins, f_loss = evaluate(args.train, args.train_label, w, (fold,nfold))
             cnt_ins += f_ins
             cnt_loss += f_loss
         print "CV result: %f"%(cnt_loss/cnt_ins)
 
-    print('Done, elapsed time: %s' % str(datetime.now() - start))
+    info('Done, elapsed time: %s' % str(datetime.now() - start))
 
 if __name__== '__main__':
     main()
