@@ -22,18 +22,18 @@ class Data(object):
             # parse x
             features = feat_line.rstrip().split(',')
             ID = int(features[0])
-            x = feature_maker.transform(None, features[1:])
+            x = feature_maker.transform(None, features)
             if label_line is None:
                 self.instances.append((ID, x))
             else:
                 # parse y, if provided
                 # use float() to prevent future type casting, [1:] to ignore id
-                y = [float(y) for y in label_line.split(',')[1:]]
+                y = map(float, label_line.split(',')[1:])
                 self.instances.append((ID, x, y))
 
     def __iter__(self):
         """ Return an iterator of the data set. (ID,x,y) or (ID,x). """
-        return itertools.chain(self.instances)
+        return iter(self.instances)
 
 class StreamData(object):
     """ Container of a streaming data set. """
@@ -70,11 +70,11 @@ class StreamData(object):
         label_line = self.label_lines.next()
         features = feat_line.rstrip().split(',')
         ID = int(features[0])
-        x = self.feature_maker.transform(None, features[1:])
+        x = self.feature_maker.transform(None, features)
         if label_line is None:
             return (ID, x)
         else:
             # parse y, if provided
             # use float() to prevent future type casting, [1:] to ignore id
-            y = [float(y) for y in label_line.split(',')[1:]]
+            y = map(float, label_line.split(',')[1:])
             return (ID, x, y)

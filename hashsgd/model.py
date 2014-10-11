@@ -8,9 +8,7 @@ class LogisticRegressionModel(object):
         self.N = [ [0.]*D for _ in labels ] # sum of abs(gradient) for a given feature, used for adaptive learning rate
 
     def _predict_one(self, x, w):
-        wTx = 0.
-        for (i,v) in x:  # do wTx
-            wTx += w[i] * v  # w[i] * x[i]
+        wTx = sum( w[i]*v for (i,v) in x )  # wTx = w[i]*x[i]
         return 1. / (1. + exp(-max(min(wTx, 20.), -20.)))  # bounded sigmoid
 
     def predict(self, x):
@@ -24,7 +22,7 @@ class LogisticRegressionModel(object):
         for (i,v) in x:
             # alpha / sqrt(n) is the adaptive learning rate
             # (p - y) * x[i] is the current gradient
-            n[i] += abs(p - y)
+            n[i] += abs((p-y)*v)
             w[i] -= (p - y) * v * alpha / sqrt(n[i])
 
     def update(self, x, y, alpha):

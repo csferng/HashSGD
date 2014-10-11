@@ -80,7 +80,7 @@ def train_one(data, model):
             loss = 0.
             cnt = 0
 
-    info('trained all: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
+    info('trained all: %d\tcurrent logloss: %f'%(i+1, loss/33./cnt))
     return model
 
 def evaluate(valid_data, model):
@@ -140,5 +140,7 @@ if __name__== '__main__':
     import traceback
     try:
         main()
+#        import cProfile
+#        cProfile.run('main()')
     except:
         traceback.print_exc()

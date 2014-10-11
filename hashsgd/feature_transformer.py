@@ -33,13 +33,13 @@ class OneHotTransformer(FeatureTransformer):
         super(OneHotTransformer, self).__init__(d)
 
     def transform(self, x, features):
+        # features[0] is ID
         # x[0] reserved for bias term
         if x is None:
-            x = [(0,1.)] + [0]*len(features)
-        for (m,feat) in enumerate(features):
-            idx = m + 1
-            featid = self.hash_to_D(idx, feat)
-            x[idx] = (featid, 1.)
+            x = [(0,1.)]*len(features)
+        for (idx,feat) in enumerate(features):
+            if idx > 0: # skip ID
+                x[idx] = (self.hash_to_D(idx, feat), 1.)
         return x
 
 class NumericValueTransformer(FeatureTransformer):
@@ -55,21 +55,27 @@ class NumericValueTransformer(FeatureTransformer):
         self.dim = self.hash_base + 145
 
     def transform(self, x, features):
+        # features[0] is ID
         # x[0] reserved for bias term
         x = [(0,1.)]
-        for (m,feat) in enumerate(features):
-            idx = m + 1
-            x.append((self.hash_to_D(idx,feat), 1.))
-            if feat == '':
-                pass
-            elif idx in BOOLEAN_FEATURE_ID:
-                x.append((self.hash_base+idx-1, 1. if feat=='YES' else -1.))
-            elif idx in INTEGER_FEATURE_ID:
-                raw = int(feat)
-                val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
-                x.append((self.hash_base+idx-1, val))
-            elif idx in NUMERIC_FEATURE_ID:
-                x.append((self.hash_base+idx-1, float(feat)/self.scale[idx]))
+        for (idx,feat) in enumerate(features):
+            if idx > 0: # skip ID
+                x.append((self.hash_to_D(idx,feat), 1.))
+        for idx in BOOLEAN_FEATURE_ID:
+            feat = features[idx]
+            if feat == '': continue
+            x.append((self.hash_base+idx-1, 1. if feat=='YES' else -1.))
+        for idx in INTEGER_FEATURE_ID:
+            feat = features[idx]
+            if feat == '' or feat == '0': continue
+            raw = int(feat)
+            val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
+            x.append((self.hash_base+idx-1, val))
+        for idx in NUMERIC_FEATURE_ID:
+            if idx in INTEGER_FEATURE_ID: continue
+            feat = features[idx]
+            if feat == '' or feat == '0': continue
+            x.append((self.hash_base+idx-1, float(feat)/self.scale[idx]))
         return x
 
     def initialize_per_train(self, feat_lines):
