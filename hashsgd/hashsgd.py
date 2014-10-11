@@ -137,4 +137,8 @@ def main():
     info('Done, elapsed time: %s' % str(datetime.now() - start))
 
 if __name__== '__main__':
-    main()
+    import traceback
+    try:
+        main()
+    except:
+        traceback.print_exc()
