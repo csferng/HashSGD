@@ -1,5 +1,4 @@
 import itertools
-import sys
 
 def in_fold(i, fold_in_cv):
     x, nf = fold_in_cv
@@ -9,8 +8,7 @@ def in_fold(i, fold_in_cv):
     elif x < 0: # training, return everything other than x-th fold
         return r != -x
     else:
-        print >> sys.stderr, "Wrong fold setting!"
-        sys.exit(1)
+        raise ValueError("Wrong fold setting: "+repr(fold_in_cv))
 
 def open_csv(path, fold_in_cv=None):
     with open(path) as f:

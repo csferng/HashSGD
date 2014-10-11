@@ -10,7 +10,7 @@ class FeatureTransformer(object):
     def __init__(self, d):
         self.dim = d
 
-    def transform(self):
+    def transform(self, x, features):
         raise Exception("Not implemented transform() in base class")
 
     def hash_to_D(self, idx, feat):
@@ -33,6 +33,8 @@ class OneHotTransformer(FeatureTransformer):
 
     def transform(self, x, features):
         # x[0] reserved for bias term
+        if x is None:
+            x = [(0,1.)] + [0]*len(features)
         for (m,feat) in enumerate(features):
             idx = m + 1
             featid = self.hash_to_D(idx, feat)
@@ -51,6 +53,8 @@ class NumericValueTransformer(FeatureTransformer):
 
     def transform(self, x, features):
         # x[0] reserved for bias term
+        if x is None:
+            x = [(0,1.)] + [0]*len(features)
         for (m,feat) in enumerate(features):
             idx = m + 1
             if idx in CATEGORICAL_FEATURE_ID:

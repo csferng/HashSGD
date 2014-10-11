@@ -14,6 +14,7 @@ as the name is changed.
  0. You just DO WHAT THE FUCK YOU WANT TO.
 '''
 
+from data import Data
 import feature_transformer
 import util
 
@@ -36,7 +37,7 @@ def info(s):
     print('%s\t%s' % (datetime.now().strftime('%m/%d %H:%M:%S'), s))
 
 def parse_args():
-    global train, label, test, prediction, alpha
+    global alpha
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=262147)
@@ -57,41 +58,6 @@ def parse_args():
     print args
     return args
 
-
-# function, generator definitions ############################################
-
-# A. x, y generator
-# INPUT:
-#     path: path to train.csv or test.csv
-#     label_path: (optional) path to trainLabels.csv
-#     fold_in_cv: (optional) tuple (x,y), see util.in_fold
-# YIELDS:
-#     ID: id of the instance (can also acts as instance count)
-#     x: a list of indices that its value is 1
-#     y: (if label_path is present) label value of y1 to y33
-def data(path, label_path=None, fold_in_cv=None):
-    # create a static x,
-    # so we don't have to construct a new x for every instance
-    # each item of x should be a tuple (feat-id, feat-value)
-    x = [0] * 146
-    x[0] = (0,1.)
-    if label_path:
-        line_stream = util.open_feature_and_label(path, label_path, fold_in_cv)
-    else:
-        line_stream = util.open_csv(path)
-    for line in line_stream:
-        feat_line = line[0] if label_path else line
-        # parse x
-        features = feat_line.rstrip().split(',')
-        ID = int(features[0])
-        x = feature_maker.transform(x, features[1:])
-        if label_path is None:
-            yield (ID, x)
-        else:
-            # parse y, if provided
-            # use float() to prevent future type casting, [1:] to ignore id
-            y = [float(y) for y in line[1].split(',')[1:]]
-            yield (ID, x, y)
 
 # B. Bounded logloss
 # INPUT:
@@ -138,7 +104,7 @@ def update(alpha, w, n, x, p, y):
 
 
 # training and testing #######################################################
-def train_one(train, label, fold_in_cv=None):
+def train_one(data):
     # a list for range(0, 33) - 13, no need to learn y14 since it is always 0
     K = [k for k in range(33) if k != 13]
 
@@ -151,7 +117,7 @@ def train_one(train, label, fold_in_cv=None):
     loss_y14 = log(1. - 10**-15)
 
     cnt = 0
-    for (i,(ID, x, y)) in enumerate(data(train, label, fold_in_cv)):
+    for (i,(ID, x, y)) in enumerate(data):
         cnt += 1
 
         # get predictions and train on all labels
@@ -168,7 +134,7 @@ def train_one(train, label, fold_in_cv=None):
     info('trained all: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
     return w
 
-def evaluate(valid_data, label, w, fold_in_cv=None):
+def evaluate(valid_data, w):
     # a list for range(0, 33) - 13, no need to learn y14 since it is always 0
     K = [k for k in range(33) if k != 13]
 
@@ -176,7 +142,7 @@ def evaluate(valid_data, label, w, fold_in_cv=None):
     loss_y14 = log(1. - 10**-15)
 
     cnt = 0
-    for (ID, x, y) in data(valid_data, label, fold_in_cv):
+    for (ID, x, y) in valid_data:
         cnt += 1
 
         # get predictions and train on all labels
@@ -198,10 +164,11 @@ def main():
 
     if args.cmd == 'test':   # train on training data and predict on testing data
         feature_maker.initialize_per_train(util.open_csv(args.train))
-        w = train_one(args.train, args.train_label)
+        data = Data(args.train, feature_maker, args.train_label)
+        w = train_one(data)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
-            for ID, x in data(args.test):
+            for ID, x in Data(args.test, feature_maker):
                 for k in K:
                     p = predict(x, w[k])
                     outfile.write('%s_y%d,%s\n' % (ID, k+1, str(p)))
@@ -213,8 +180,10 @@ def main():
         cnt_loss = 0.
         for fold in xrange(1,nfold+1):
             feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
-            w = train_one(args.train, args.train_label, (-fold,nfold))
-            f_ins, f_loss = evaluate(args.train, args.train_label, w, (fold,nfold))
+            train_data = Data(args.train, feature_maker, args.train_label, (-fold,nfold))
+            w = train_one(train_data)
+            valid_data = Data(args.train, feature_maker, args.train_label, (fold,nfold))
+            f_ins, f_loss = evaluate(valid_data, w)
             cnt_ins += f_ins
             cnt_loss += f_loss
         print "CV result: %f"%(cnt_loss/cnt_ins)
