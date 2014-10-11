@@ -15,7 +15,7 @@ class FeatureTransformer(object):
         raise Exception("Not implemented transform() in base class")
 
     def hash_to_D(self, idx, feat):
-        return abs(hash(str(idx) + '_' + feat)) % self.hash_base
+        return abs(hash('%d_%s'%(idx,feat))) % self.hash_base
 
     def initialize_per_train(self, feat_lines):
         pass

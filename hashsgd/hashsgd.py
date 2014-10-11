@@ -14,7 +14,7 @@ as the name is changed.
  0. You just DO WHAT THE FUCK YOU WANT TO.
 '''
 
-from data import Data
+from data import StreamData as Data
 from model import LogisticRegressionModel as Model
 import feature_transformer
 import util
@@ -76,7 +76,7 @@ def train_one(data, model):
 
         # print out progress, so that we know everything is working
         if cnt % 100000 == 0:
-            info('trained now: %d\tcurrent logloss: %f'%(cnt, loss/33./cnt))
+            info('trained now: %d\tcurrent logloss: %f'%(i+1, loss/33./cnt))
             loss = 0.
             cnt = 0
 
