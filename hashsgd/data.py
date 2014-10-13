@@ -1,6 +1,13 @@
 import util
 
 import itertools
+""" XXX fix import error """
+import _hashlib
+_hashlib.openssl_md_meth_names = frozenset(['SHA256', 'SHA512', 'sha256', 'sha512', 'md5', 'SHA1', 'SHA224', 'SHA', 'SHA384', 'sha1', 'sha224', 'sha', 'MD5', 'sha384'])
+""" XXX """
+import random
+import sys
+from Queue import PriorityQueue, Empty
 
 class Data(object):
     """ Container of a data set. """
@@ -81,3 +88,30 @@ class StreamData(object):
             # use float() to prevent future type casting, [1:] to ignore id
             y = map(float, label_line.split(',')[1:])
             return (ID, x, y)
+
+class PoolStreamData(StreamData):
+    def __init__(self, feat_path, feature_maker, label_path=None, fold_in_cv=None):
+        self.pool = PriorityQueue(100000)
+        super(PoolStreamData, self).__init__(feat_path, feature_maker, label_path, fold_in_cv)
+        self.fill_pool()
+
+    def fill_pool(self):
+        while not self.pool.full():
+            try:
+                ins = super(PoolStreamData,self).next()
+                self.pool.put((random.random(),ins))    # insert ins with random priority --> kind of random shuffle
+            except StopIteration:
+                break
+
+    def rewind(self):
+        self.pool = PriorityQueue(100000)
+        super(PoolStreamData,self).rewind()
+        self.fill_pool()
+
+    def next(self):
+        try:
+            (_,ins) = self.pool.get(False)
+        except Empty:
+            raise StopIteration
+        self.fill_pool()
+        return ins

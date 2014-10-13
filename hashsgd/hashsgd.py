@@ -14,7 +14,7 @@ as the name is changed.
  0. You just DO WHAT THE FUCK YOU WANT TO.
 '''
 
-from data import StreamData as Data
+from data import PoolStreamData as TrainData, StreamData as TestData
 from model import LogisticRegressionModel as Model
 import feature_transformer
 import util
@@ -110,13 +110,13 @@ def main():
 
     if args.cmd == 'test':   # train on training data and predict on testing data
         feature_maker.initialize_per_train(util.open_csv(args.train))
-        data = Data(args.train, feature_maker, args.train_label)
+        data = TrainData(args.train, feature_maker, args.train_label)
         model = train_one(data, new_model(feature_maker.dim))
         data.rewind()
         model = train_one(data, model)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
-            for ID, x in Data(args.test, feature_maker):
+            for ID, x in TestData(args.test, feature_maker):
                 pred = model.predict(x)
                 for (k,p) in zip(K,pred):
                     outfile.write('%s_y%d,%.16f\n' % (ID,k+1,p))
@@ -128,11 +128,11 @@ def main():
         cnt_loss = 0.
         for fold in xrange(1,nfold+1):
             feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
-            train_data = Data(args.train, feature_maker, args.train_label, (-fold,nfold))
+            train_data = TrainData(args.train, feature_maker, args.train_label, (-fold,nfold))
             model = train_one(train_data, new_model(feature_maker.dim))
             train_data.rewind()
             model = train_one(train_data, model)
-            valid_data = Data(args.train, feature_maker, args.train_label, (fold,nfold))
+            valid_data = TestData(args.train, feature_maker, args.train_label, (fold,nfold))
             f_ins, f_loss = evaluate(valid_data, model)
             cnt_ins += f_ins
             cnt_loss += f_loss
