@@ -6,6 +6,7 @@ class LogisticRegressionModel(object):
         self.D = D
         self.W = [ [0.]*D for _ in labels ] # weights
         self.N = [ [0.]*D for _ in labels ] # sum of abs(gradient) for a given feature, used for adaptive learning rate
+        self.__space = [0]*len(labels)
 
     def _predict_one(self, x, w):
         wTx = sum( w[i]*v for (i,v) in x )  # wTx = w[i]*x[i]
@@ -16,7 +17,9 @@ class LogisticRegressionModel(object):
         @param x: features, in sparse format [(idx,value)*]
         @return: probability of p(y=1 | x; w)
         """
-        return [ self._predict_one(x, w) for w in self.W ]
+        for (i,w) in enumerate(self.W):
+            self.__space[i] = self._predict_one(x, w)
+        return self.__space
 
     def _update_one(self, alpha, w, n, x, p, y):
         for (i,v) in x:
@@ -31,22 +34,20 @@ class LogisticRegressionModel(object):
         @param y: truth labels
         @param alpha: learning rate
         """
-        l = []
-        for (k,w,n) in zip(self.labels, self.W, self.N):
-            p = self._predict_one(x, w)
-            self._update_one(alpha, w, n, x, p, y[k])
-            p = max(min(p, 1. - 10e-15), 10e-15)    # bounded
-            l.append(-log(p) if y[k]==1. else -log(1.-p))
-        return l
+        losses = self.predict(x)
+        for (i,(p,k)) in enumerate(zip(losses,self.labels)):
+            self._update_one(alpha, self.W[i], self.N[i], x, p, y[k])
+            p = max(min(p, 1.-1e-15), 1e-15)    # bounded
+            losses[i]  = -log(p if y[k]==1. else (1.-p))
+        return losses
 
     def loss(self, x, y):
         """ Calculate log-loss.
         @param x: features, in sparse format [(idx,value)*]
         @param y: truth labels
         """
-        l = []
-        for (k,w,n) in zip(self.labels, self.W, self.N):
-            p = self._predict_one(x, w)
-            p = max(min(p, 1. - 10e-15), 10e-15)    # bounded
-            l.append(-log(p) if y[k]==1. else -log(1.-p))
-        return l
+        losses = self.predict(x)
+        for (i,(p,k)) in enumerate(zip(losses,self.labels)):
+            p = max(min(p, 1.-1e-15), 1e-15)    # bounded
+            losses[i]  = -log(p if y[k]==1. else (1.-p))
+        return losses
