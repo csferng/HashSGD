@@ -1,4 +1,5 @@
 import collections
+import itertools
 import math
 
 BOOLEAN_FEATURE_ID = set([1,2,10,11,12,13,14,24,25,26,30,31,32,33,41,42,43,44,45,55,56,57,62,63,71,72,73,74,75,85,86,87,92,93,101,102,103,104,105,115,116,117,126,127,128,129,130,140,141,142])
@@ -33,6 +34,31 @@ class FeatureTransformer(object):
     def _do_init(self, line): pass
     def _post_init(self): pass
 
+class CompositeTransformer(FeatureTransformer):
+    def __init__(self, d, transform_methods):
+        super(CompositeTransformer, self).__init__(d)
+        self.transformers = [ get_maker(d,m) for m in transform_methods ]
+        self.dim = max( sub.dim for sub in self.transformers )
+
+    def transform(self, x, features):
+        # only one bias term needed
+        return sum(( sub.transform(x, features)[1:] for sub in self.transformers ), [(self.hash_base,1.)])
+
+    def need_init(self):
+        return any( sub.need_init() for sub in self.transformers )
+
+    def _pre_init(self):
+        for sub in self.transformers:
+            sub._pre_init()
+
+    def _do_init(self, line):
+        for sub in self.transformers:
+            sub._do_init(line)
+
+    def _post_init(self):
+        for sub in self.transformers:
+            sub._post_init()
+
 class OneHotTransformer(FeatureTransformer):
     """ one-hot encode everything with hash trick
     categorical: one-hotted
@@ -55,6 +81,21 @@ class OneHotTransformer(FeatureTransformer):
                 x[idx] = (self.hash_to_D(idx, feat), 1.)
         return x
 
+class Poly2OneHotTransformer(FeatureTransformer):
+    def __init__(self, d):
+        super(Poly2OneHotTransformer, self).__init__(d)
+        n = len(CATEGORICAL_FEATURE_ID)
+        self.template = [(self.hash_base,1.)] + [0]*(n*(n-1)/2)
+
+    def transform(self, x, features):
+        # features[0] is ID
+        # x[0] reserved for bias term
+        if x is None:
+            x = self.template[:]
+        for (i,(id1,id2)) in enumerate(itertools.combinations(CATEGORICAL_FEATURE_ID,2)):
+            x[i+1] = (self.hash_to_D((id1<<10)+id2, '%s:%s'%(features[id1],features[id2])), 1.)
+        return x
+
 class NumericValueTransformer(FeatureTransformer):
     """
     categorical: one-hot encoded
@@ -72,12 +113,10 @@ class NumericValueTransformer(FeatureTransformer):
         # x[0] reserved for bias term
         x = [(self.hash_base,1.)]
         for (idx,feat) in enumerate(features):
-            if idx > 0: # skip ID
-                x.append((self.hash_to_D(idx,feat), 1.))
-            if feat == '' or feat == '0': continue
+            if idx == 0 or feat == '' or feat == '0': continue
             if FEATURE_TYPE[idx] == 'B':
                 x.append((self.hash_base+idx, 1. if feat=='YES' else -1.))
-            elif FEATURE_TYPE[idx] == 'C':
+            elif FEATURE_TYPE[idx] == 'I':
                 raw = int(feat)
                 val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
                 x.append((self.hash_base+idx, val))
@@ -112,5 +151,9 @@ def get_maker(D, transform_method):
         return OneHotTransformer(D)
     elif transform_method == 'numeric':
         return NumericValueTransformer(D)
+    elif transform_method == 'poly2':
+        return Poly2OneHotTransformer(D)
+    elif transform_method.find(',') != -1:  # composite
+        return CompositeTransformer(D, transform_method.split(','))
     else:
         raise ValueError("Unknown transform method: "+transform_method)
