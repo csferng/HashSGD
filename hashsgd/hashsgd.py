@@ -109,7 +109,7 @@ def main():
     feature_maker = feature_transformer.get_maker(args.D, args.transform)
 
     if args.cmd == 'test':   # train on training data and predict on testing data
-        feature_maker.initialize_per_train(util.open_csv(args.train))
+        feature_maker.init_per_train(util.open_csv(args.train))
         data = TrainData(args.train, feature_maker, args.train_label)
         model = train_one(data, new_model(feature_maker.dim))
         data.rewind()
@@ -127,7 +127,7 @@ def main():
         cnt_ins = 0
         cnt_loss = 0.
         for fold in xrange(1,nfold+1):
-            feature_maker.initialize_per_train(util.open_csv(args.train, (-fold,nfold)))
+            feature_maker.init_per_train(util.open_csv(args.train, (-fold,nfold)))
             train_data = TrainData(args.train, feature_maker, args.train_label, (-fold,nfold))
             model = train_one(train_data, new_model(feature_maker.dim))
             train_data.rewind()

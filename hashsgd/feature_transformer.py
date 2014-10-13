@@ -6,9 +6,11 @@ CATEGORICAL_FEATURE_ID = set([3,4,34,35,61,64,65,91,94,95])
 NUMERIC_FEATURE_ID = set([5,6,7,8,9,15,16,17,18,19,20,21,22,23,27,28,29,36,37,38,39,40,46,47,48,49,50,51,52,53,54,58,59,60,66,67,68,69,70,76,77,78,79,80,81,82,83,84,88,89,90,96,97,98,99,100,106,107,108,109,110,111,112,113,114,118,119,120,121,122,123,124,125,131,132,133,134,135,136,137,138,139,143,144,145])
 INTEGER_FEATURE_ID = set([15,17,18,22,23,27,46,48,49,53,54,58,76,78,79,83,84,88,106,108,109,113,114,118,131,133,134,138,139,143])
 
+FEATURE_TYPE = '-BBCCNNNNNBBBBBINIINNNIIBBBINNBBBBCCNNNNNBBBBBINIINNNIIBBBINNCBBCCNNNNNBBBBBINIINNNIIBBBINNCBBCCNNNNNBBBBBINIINNNIIBBBINNNNNNNBBBBBINIINNNIIBBBINN'
+
 class FeatureTransformer(object):
     def __init__(self, d):
-        self.dim = d
+        self.dim = d + 1
         self.hash_base = d
 
     def transform(self, x, features):
@@ -17,8 +19,19 @@ class FeatureTransformer(object):
     def hash_to_D(self, idx, feat):
         return abs(hash('%d_%s'%(idx,feat))) % self.hash_base
 
-    def initialize_per_train(self, feat_lines):
-        pass
+    def need_init(self): return False
+
+    def init_per_train(self, feat_lines):
+        if not self.need_init():
+            return
+        self._pre_init()
+        for line in feat_lines:
+            self._do_init(line)
+        self._post_init()
+
+    def _pre_init(self): pass
+    def _do_init(self, line): pass
+    def _post_init(self): pass
 
 class OneHotTransformer(FeatureTransformer):
     """ one-hot encode everything with hash trick
@@ -36,7 +49,7 @@ class OneHotTransformer(FeatureTransformer):
         # features[0] is ID
         # x[0] reserved for bias term
         if x is None:
-            x = [(0,1.)]*len(features)
+            x = [(self.hash_base,1.)]*len(features)
         for (idx,feat) in enumerate(features):
             if idx > 0: # skip ID
                 x[idx] = (self.hash_to_D(idx, feat), 1.)
@@ -52,52 +65,52 @@ class NumericValueTransformer(FeatureTransformer):
     def __init__(self, d):
         super(NumericValueTransformer, self).__init__(d)
         self.scale = collections.defaultdict(lambda:1)
-        self.dim = self.hash_base + 145
+        self.dim = self.hash_base + 146 # 1 bias, 145 features
 
     def transform(self, x, features):
         # features[0] is ID
         # x[0] reserved for bias term
-        x = [(0,1.)]
+        x = [(self.hash_base,1.)]
         for (idx,feat) in enumerate(features):
             if idx > 0: # skip ID
                 x.append((self.hash_to_D(idx,feat), 1.))
-        for idx in BOOLEAN_FEATURE_ID:
-            feat = features[idx]
-            if feat == '': continue
-            x.append((self.hash_base+idx-1, 1. if feat=='YES' else -1.))
-        for idx in INTEGER_FEATURE_ID:
-            feat = features[idx]
             if feat == '' or feat == '0': continue
-            raw = int(feat)
-            val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
-            x.append((self.hash_base+idx-1, val))
-        for idx in NUMERIC_FEATURE_ID:
-            if idx in INTEGER_FEATURE_ID: continue
-            feat = features[idx]
-            if feat == '' or feat == '0': continue
-            x.append((self.hash_base+idx-1, float(feat)/self.scale[idx]))
+            if FEATURE_TYPE[idx] == 'B':
+                x.append((self.hash_base+idx, 1. if feat=='YES' else -1.))
+            elif FEATURE_TYPE[idx] == 'C':
+                raw = int(feat)
+                val = -1 if raw==-1 else math.log(raw+1)/self.scale[idx]
+                x.append((self.hash_base+idx, val))
+            elif FEATURE_TYPE[idx] == 'N':
+                x.append((self.hash_base+idx, float(feat)/self.scale[idx]))
         return x
 
-    def initialize_per_train(self, feat_lines):
-        minmax = collections.defaultdict(lambda:(1e99,-1e99))
-        for line in feat_lines:
-            features = line.rstrip().split(',')    # features[0] is ID
-            for i in NUMERIC_FEATURE_ID:    # feature id here is 1-based indexed
-                val = features[i]
-                if val == '': continue
-                x = float(val)
-                mm = minmax[i]
-                minmax[i] = (min(x,mm[0]), max(x,mm[1]))
+    def need_init(self): return True
+
+    def _pre_init(self):
+        self.minmax = collections.defaultdict(lambda:(1e99,-1e99))
+
+    def _do_init(self, line):
+        features = line.rstrip().split(',')    # features[0] is ID
+        for i in NUMERIC_FEATURE_ID:    # feature id here is 1-based indexed
+            val = features[i]
+            if val == '': continue
+            x = float(val)
+            mm = self.minmax[i]
+            self.minmax[i] = (min(x,mm[0]), max(x,mm[1]))
+
+    def _post_init(self):
         for i in NUMERIC_FEATURE_ID:
             if i in INTEGER_FEATURE_ID:
-                self.scale[i] = math.log(minmax[i][1]+1)
+                self.scale[i] = math.log(self.minmax[i][1]+1)
             else:
-                self.scale[i] = max(abs(minmax[i][0]), abs(minmax[i][1]))
+                self.scale[i] = max(abs(self.minmax[i][0]), abs(self.minmax[i][1]))
+        del self.minmax
 
 def get_maker(D, transform_method):
-    if transform_method == 'one_hot':
+    if transform_method == 'onehot':
         return OneHotTransformer(D)
-    elif transform_method == 'numeric_value':
+    elif transform_method == 'numeric':
         return NumericValueTransformer(D)
     else:
         raise ValueError("Unknown transform method: "+transform_method)
