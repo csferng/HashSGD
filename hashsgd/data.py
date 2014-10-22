@@ -26,21 +26,24 @@ class Data(object):
         else:
             label_lines = itertools.repeat(None)   # endless None
         for (feat_line, label_line) in itertools.izip(feat_lines, label_lines):
-            # parse x
-            features = feat_line.rstrip().split(',')
-            ID = int(features[0])
-            x = feature_maker.transform(None, features)
-            if label_line is None:
-                self.instances.append((ID, x))
-            else:
-                # parse y, if provided
-                # use float() to prevent future type casting, [1:] to ignore id
-                y = map(float, label_line.split(',')[1:])
-                self.instances.append((ID, x, y))
+            self.instances.append(self._make_feature(feat_line, label_line))
 
     def __iter__(self):
         """ Return an iterator of the data set. (ID,x,y) or (ID,x). """
         return iter(self.instances)
+
+    def _make_feature(self, feat_line, label_line):
+        # parse x
+        features = feat_line.rstrip().split(',')
+        ID = int(features[0])
+        x = self.feature_maker.transform(None, features)
+        if label_line is None:
+            return (ID, x)
+        else:
+            # parse y, if provided
+            # use float() to prevent future type casting, [1:] to ignore id
+            y = map(float, label_line.split(',')[1:])
+            return (ID, x, y)
 
     def rewind(self):
         pass
@@ -78,6 +81,10 @@ class StreamData(object):
     def next(self):
         feat_line = self.feat_lines.next()
         label_line = self.label_lines.next()
+        return self._make_feature(feat_line, label_line)
+
+    def _make_feature(self, feat_line, label_line):
+        # parse x
         features = feat_line.rstrip().split(',')
         ID = int(features[0])
         x = self.feature_maker.transform(None, features)
