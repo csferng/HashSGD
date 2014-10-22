@@ -45,6 +45,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=262147)
+    parser.add_argument('-R', help='number of epoches for SGD', type=int, default=2)
     parser.add_argument('--alpha', '-a', help='learning rate for SGD optimization', type=float, default=.1)
     parser.add_argument('--transform', help='method to transform features', default='one_hot')
     parser.add_argument('train', help='path to training file')
@@ -111,9 +112,10 @@ def main():
     if args.cmd == 'test':   # train on training data and predict on testing data
         feature_maker.init_per_train(util.open_csv(args.train))
         data = TrainData(args.train, feature_maker, args.train_label)
-        model = train_one(data, new_model(feature_maker.dim))
-        data.rewind()
-        model = train_one(data, model)
+        model = new_model(feature_maker.dim)
+        for r in xrange(args.R):
+            if r > 0: data.rewind()
+            model = train_one(data, model)
         with open(args.prediction, 'w') as outfile:
             outfile.write('id_label,pred\n')
             for ID, x in TestData(args.test, feature_maker):
@@ -124,19 +126,26 @@ def main():
                         outfile.write('%s_y14,0.0\n' % ID)
     else:   # do cross validation
         nfold = args.nfold
-        cnt_ins = 0
-        cnt_loss = 0.
+        cnt_ins = [0]*args.R
+        cnt_loss = [0.]*args.R
         for fold in xrange(1,nfold+1):
             feature_maker.init_per_train(util.open_csv(args.train, (-fold,nfold)))
             train_data = TrainData(args.train, feature_maker, args.train_label, (-fold,nfold))
-            model = train_one(train_data, new_model(feature_maker.dim))
-            train_data.rewind()
-            model = train_one(train_data, model)
+            model = new_model(feature_maker.dim)
             valid_data = TestData(args.train, feature_maker, args.train_label, (fold,nfold))
-            f_ins, f_loss = evaluate(valid_data, model)
-            cnt_ins += f_ins
-            cnt_loss += f_loss
-        print "CV result: %f"%(cnt_loss/cnt_ins)
+            for r in xrange(args.R):
+                if r > 0: train_data.rewind()
+                model = train_one(train_data, model)
+                if r > 0: valid_data.rewind()
+                f_ins, f_loss = evaluate(valid_data, model)
+                info("round validation: %f" % (f_loss/f_ins))
+                cnt_ins[r] += f_ins
+                cnt_loss[r] += f_loss
+            del train_data
+            del valid_data
+            del model
+        for r in xrange(args.R):
+            print "%d round CV result: %f"%(r, cnt_loss[r]/cnt_ins[r])
 
     info('Done, elapsed time: %s' % str(datetime.now() - start))
 
