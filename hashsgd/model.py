@@ -1,4 +1,9 @@
+""" XXX fix import error """
+import _hashlib
+_hashlib.openssl_md_meth_names = frozenset(['SHA256', 'SHA512', 'sha256', 'sha512', 'md5', 'SHA1', 'SHA224', 'SHA', 'SHA384', 'sha1', 'sha224', 'sha', 'MD5', 'sha384'])
+""" XXX """
 from math import exp, log, sqrt
+import random
 
 class LogisticRegressionModel(object):
     def __init__(self, labels, D):
@@ -51,3 +56,32 @@ class LogisticRegressionModel(object):
             p = max(min(p, 1.-1e-15), 1e-15)    # bounded
             losses[i]  = -log(p if y[k]==1. else (1.-p))
         return losses
+
+class FactorizationMachineModel(LogisticRegressionModel):
+    def __init__(self, labels, D, K=4):
+        super(FactorizationMachineModel, self).__init__(labels, D)
+        self.K = K
+        del self.W
+        del self.N
+        # W[l][k][d], for a feature dim d and a label l, the weight vector is w[l][*][d]
+        self.W = [ [ [ random.gauss(0., 0.01) for d in xrange(D) ] for k in xrange(K) ] for l in labels ]
+        self.N = [ [ [0]*D for k in xrange(K) ] for l in labels ]
+
+    def _predict_one(self, x, w):
+        """ Calculate sum_{i!=j} w_i^Tw_jx_ix_j """
+        wTx = [ sum( w_k[i]*v for (i,v) in x ) for w_k in w ]     # wTx[k] = \sum_i w[k][i]*x[i]
+        wTx_2 = sum( (w_k[i]*v)**2 for w_k in w for (i,v) in x )  # wTx_2 = \sum_i \sum_k (w[k][i]*x[i])^2
+
+        wTwxx = (sum( wx_k**2 for wx_k in wTx ) - wTx_2) / 2.
+        return 1. / (1. + exp(-max(min(wTwxx, 20.), -20.)))  # bounded sigmoid
+
+    def _update_one(self, alpha, w, n, x, p, y):
+        wTx = [ sum( wk[i]*v for (i,v) in x ) for wk in w ]     # wTx[k] = \sum_i w[k][i]*x[i]
+        diff = p - y
+        # grad of w[*][i] = (y-p)(\sum_{j!=i} w[*][j]x[j] )
+        for (w_k, n_k, wTx_k) in zip(w, n, wTx):
+            for (i,v) in x:
+                grad = diff * (wTx_k-w_k[i]*v)
+                # alpha / sqrt(n) is the adaptive learning rate
+                n_k[i] += abs(grad)
+                w_k[i] -= grad * alpha / sqrt(n_k[i])

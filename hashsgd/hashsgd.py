@@ -15,7 +15,7 @@ as the name is changed.
 '''
 
 from data import PoolStreamData as TrainData, StreamData as TestData
-from model import LogisticRegressionModel as Model
+from model import FactorizationMachineModel as Model
 import feature_transformer
 import util
 
