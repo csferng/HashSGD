@@ -15,7 +15,7 @@ as the name is changed.
 '''
 
 from data import PoolStreamData as TrainData, StreamData as TestData
-from model import FactorizationMachineModel as Model
+from model import LogisticRegressionModel as Model
 import feature_transformer
 import util
 
@@ -34,6 +34,7 @@ import argparse
 K = [k for k in range(33) if k != 13]
 
 alpha = .1   # learning rate for sgd optimization
+lmbda = .001    # regularization parameter
 
 feature_maker = None
 
@@ -41,13 +42,14 @@ def info(s):
     print('%s\t%s' % (datetime.now().strftime('%m/%d %H:%M:%S'), s))
 
 def parse_args():
-    global alpha
+    global alpha, lmbda
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-D', help='number of weights used for each model, we have 32 of them', type=int, default=262147)
     parser.add_argument('-R', help='number of epoches for SGD', type=int, default=2)
     parser.add_argument('--alpha', '-a', help='learning rate for SGD optimization', type=float, default=.1)
-    parser.add_argument('--transform', help='method to transform features', default='one_hot')
+    parser.add_argument('--lmbda', '-l', help='regularization parameter for SGD optimization', type=float, default=.001)
+    parser.add_argument('--transform', help='method to transform features', default='onehot')
     parser.add_argument('train', help='path to training file')
     parser.add_argument('train_label', help='path to label file of training data')
     subparsers = parser.add_subparsers()
@@ -60,6 +62,7 @@ def parse_args():
     subparser_test.set_defaults(cmd='test')
     args = parser.parse_args()
     alpha = args.alpha
+    lmbda = args.lmbda
     print args
     return args
 
