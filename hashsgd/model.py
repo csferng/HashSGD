@@ -31,7 +31,7 @@ class LogisticRegressionModel(object):
         for (i,v) in x:
             # alpha / sqrt(n) is the adaptive learning rate
             # (p - y) * x[i] is the current gradient
-            n[i] += abs((p-y)*v)
+            n[i] += ((p-y)*v)**2
             w[i] -= (p - y) * v * alpha / sqrt(n[i])
 
     def update(self, x, y, alpha):
@@ -89,5 +89,5 @@ class FactorizationMachineModel(LogisticRegressionModel):
             for (i,v) in x:
                 grad = diff * (wTx_k-w_k[i]*v)
                 # alpha / sqrt(n) is the adaptive learning rate
-                n_k[i] += abs(grad)
+                n_k[i] += (grad)**2
                 w_k[i] -= 0 if grad==0 else grad * alpha / (n_k[i]**(1./4))
