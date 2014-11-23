@@ -96,6 +96,19 @@ class Poly2OneHotTransformer(FeatureTransformer):
             x[i+1] = (self.hash_to_D((id1<<10)+id2, '%s:%s'%(features[id1],features[id2])), 1.)
         return x
 
+class Poly2AllTransformer(FeatureTransformer):
+    def __init__(self, d):
+        super(Poly2AllTransformer, self).__init__(d)
+
+    def transform(self, x, features):
+        # features[0] is ID
+        # x[0] reserved for bias term
+        x = [(self.hash_base, 1.)]
+        enum_features = [ (idx,feat) for (idx,feat) in enumerate(features) if idx!=0 and feat!='' and feat!='0' ]
+        for ((id1,f1), (id2,f2)) in itertools.combinations(enum_features, 2):
+            x.append((self.hash_to_D((id1<<10)+id2, '%s:%s'%(f1,f2)), 1.))
+        return x
+
 class NumericValueTransformer(FeatureTransformer):
     """
     categorical: one-hot encoded
@@ -153,6 +166,8 @@ def get_maker(D, transform_method):
         return NumericValueTransformer(D)
     elif transform_method == 'poly2':
         return Poly2OneHotTransformer(D)
+    elif transform_method == 'poly2all':
+        return Poly2AllTransformer(D)
     elif transform_method.find(',') != -1:  # composite
         return CompositeTransformer(D, transform_method.split(','))
     else:
